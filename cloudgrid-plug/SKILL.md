@@ -1,5 +1,5 @@
 ---
-version: 0.1.0
+version: 0.1.2
 name: cloudgrid-plug
 description: |
   Deploy a directory or URL to CloudGrid. Use when the user wants to ship, deploy,
@@ -11,10 +11,8 @@ allowed-tools: Bash
 
 # CloudGrid Plug
 
-Build and deploy the current directory, a path, or a URL. Prints the live URL.
-Wraps `cloudgrid plug`.
-
-Status: stub. Full implementation lands in Phase 2.
+Build and deploy a directory, a path, or a URL. Prints the live URL when it is
+done. This is the center of the build-and-ship loop. Wraps `cloudgrid plug`.
 
 ## Step 0 — Bootstrap
 
@@ -22,8 +20,38 @@ Status: stub. Full implementation lands in Phase 2.
 2. If `cloudgrid whoami` fails: ask the user to run `cloudgrid login`. Wait for
    confirmation.
 
-## Usage
+## UX rules
+
+- Be concise. No raw IDs, no JSON dumps in chat.
+- Detect the user's language from their first message and reply in it. Keep
+  technical flags in English.
+- The deploy streams build progress. Let it run. Do not interrupt it.
+
+## How to run it
+
+Most of the time, run it from the project directory with no arguments:
 
 ```
 cloudgrid plug
 ```
+
+It uses the entity linked to the directory, builds, deploys, and prints the URL.
+A first deploy usually takes about 30 seconds; larger builds take longer.
+
+Other shapes:
+
+- **A specific path:** `cloudgrid plug ./site`
+- **A URL as an inspiration:** `cloudgrid plug https://example.com`
+- **Bind to an existing entity first:** `cloudgrid plug --existing <entity-id>`
+
+If this is the user's first deploy in the org, the CLI may ask which org to use.
+Pass `--org <slug>` to skip that prompt.
+
+## After plug
+
+Print the live URL plainly. Then offer the next steps: `cloudgrid-logs` to watch
+it, or `cloudgrid-share` to make it reachable by others.
+
+## References
+
+- [./references/options.md](./references/options.md) — flags, URL inspirations, and first-deploy behavior.
