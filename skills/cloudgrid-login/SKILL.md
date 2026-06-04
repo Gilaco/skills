@@ -1,6 +1,6 @@
 ---
 version: 0.2.0
-name: login
+name: cloudgrid-login
 description: |
   Sign in to CloudGrid, with or without the CLI. Use when the user wants to log in,
   sign in, authenticate, connect their account, or claim an anonymous drop they made

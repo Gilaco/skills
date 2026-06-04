@@ -86,6 +86,12 @@ function lintFile(path) {
     if (!(key in fields)) errors.push(`missing required key: ${key}`);
   }
 
+  // Brand the skill name so it reads as CloudGrid in every surface (the /skills
+  // list, /cloudgrid-<x>, and the MCP cloudgrid_<x> tools).
+  if (fields.name && !fields.name.startsWith("cloudgrid-")) {
+    errors.push(`name must start with "cloudgrid-" (got "${fields.name}")`);
+  }
+
   for (const key of VOICE_FIELDS) {
     const value = fields[key];
     if (value === undefined) continue;
