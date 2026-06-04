@@ -47,8 +47,9 @@ account, no CLI. The link lasts 7 days, and you can sign in later to keep it.
 
 | Skill | Invoke | What it does |
 |---|---|---|
-| `cloudgrid-drop` | `/cloudgrid:drop` | Share an HTML page or file, get a public URL. No login. |
+| `cloudgrid-drop` | `/cloudgrid:drop` | Share an HTML page or file, get a public URL. Login optional. |
 | `cloudgrid-login` | `/cloudgrid:login` | Sign in to CloudGrid, with or without the CLI. |
+| `cloudgrid-claim` | `/cloudgrid:claim` | Claim an anonymous drop into your account after signing in. |
 | `cloudgrid-init` | `/cloudgrid:init` | Scaffold a new app or agent. |
 | `cloudgrid-plug` | `/cloudgrid:plug` | Deploy a directory or URL. Live in about 30 seconds. |
 | `cloudgrid-logs` | `/cloudgrid:logs` | Tail logs for an entity. |
