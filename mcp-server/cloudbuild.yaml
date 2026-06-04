@@ -1,0 +1,72 @@
+# Cloud Build — release the hosted MCP in one shot: image to Artifact Registry + the
+# npm package, so the two never drift again.
+#
+# ── What the platform side must set up (NOT in this repo) ──────────────────────────
+#   1. A Cloud Build GitHub connection to github.com/cloudgrid-io/skills (2nd-gen repo
+#      connection — the existing connection is for atomicfuse/cloudgrid only).
+#   2. A trigger on that repo:
+#        event:        push tag
+#        tag filter:   ^mcp-v.*$
+#        build config: mcp-server/cloudbuild.yaml   (this file)
+#   3. Secret Manager secret NPM_TOKEN = an npm automation token with publish rights to
+#      the @cloudgrid-io scope; grant the Cloud Build SA roles/secretmanager.secretAccessor.
+#   4. Cloud Build SA needs roles/artifactregistry.writer on the community-ai repo
+#      (the api/inspiration triggers already have this — likely the same SA).
+#
+# ── Release flow ──────────────────────────────────────────────────────────────────
+#   bump mcp-server/package.json "version" to X.Y.Z, merge, then:
+#       git tag -a mcp-vX.Y.Z -m "MCP X.Y.Z" && git push origin mcp-vX.Y.Z
+#   The image tag mirrors the git tag minus the mcp- prefix (mcp-v0.2.3 -> v0.2.3) and
+#   must match package.json "version".
+#
+# ── After the build ────────────────────────────────────────────────────────────────
+#   Pin the printed digest into the MCP Deployment manifest in atomicfuse/cloudgrid and
+#   roll out. Manual today; an auto-PR to bump the digest is a future enhancement
+#   (see backlog 421).
+
+substitutions:
+  _IMAGE: europe-west3-docker.pkg.dev/dev-atomic/community-ai/mcp-server
+
+steps:
+  # Build + push the image. Cloud Build workers are amd64, so this is a native amd64
+  # image (no buildx/QEMU needed). $$ escapes shell vars from Cloud Build substitution.
+  - id: build-push-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        TAG="$TAG_NAME"
+        VERSION="$${TAG#mcp-}"
+        echo "Building ${_IMAGE}:$$VERSION (native amd64)"
+        docker build -t "${_IMAGE}:$$VERSION" mcp-server
+        docker push "${_IMAGE}:$$VERSION"
+        docker inspect --format='{{index .RepoDigests 0}}' "${_IMAGE}:$$VERSION" | tee /workspace/pinned.txt
+        echo "==> PIN this into the MCP Deployment manifest: $$(cat /workspace/pinned.txt)"
+
+  # Publish the npm package (idempotent: skip if this version is already on npm).
+  - id: npm-publish
+    name: node:20-slim
+    entrypoint: bash
+    secretEnv: ["NPM_TOKEN"]
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        cd mcp-server
+        VERSION="$$(node -p "require('./package.json').version")"
+        if npm view "@cloudgrid-io/mcp@$$VERSION" version >/dev/null 2>&1; then
+          echo "npm @cloudgrid-io/mcp@$$VERSION already published — skipping."
+        else
+          echo "//registry.npmjs.org/:_authToken=$$NPM_TOKEN" > "$$HOME/.npmrc"
+          npm publish --access public
+        fi
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/dev-atomic/secrets/NPM_TOKEN/versions/latest
+      env: NPM_TOKEN
+
+options:
+  logging: CLOUD_LOGGING_ONLY
