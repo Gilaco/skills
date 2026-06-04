@@ -25,24 +25,26 @@ behalf: scaffold, deploy, tail logs, share, read feedback. Everything here is fr
    cloudgrid login
    ```
 
-3. Add the skills to your agent. In Claude Code:
+3. Add the skills. Simplest route (works across supported agents):
 
    ```
-   /plugin marketplace add cloudgrid-io/skills
-   /plugin install cloudgrid
+   npx skills add cloudgrid-io/skills
    ```
 
-   The skills then auto-trigger from what you say ("drop this HTML to CloudGrid"),
-   or you can call one directly, for example `/cloudgrid:drop`.
+   In Claude Code they show under `/skills` and run as `/cloudgrid-drop`,
+   `/cloudgrid-login`, etc. — or just say what you want ("drop this HTML to
+   CloudGrid") and the right one triggers.
 
-   Using a different client — Claude Desktop, Cursor, claude.ai, ChatGPT — or want
-   every install/invoke path in one place? See [USAGE.md](USAGE.md).
-   See [INSTALL.md](INSTALL.md) for the short install reference.
+   Prefer a Claude Code plugin instead? `/plugin marketplace add cloudgrid-io/skills`
+   then `/plugin install cloudgrid` (invoked as `/cloudgrid:cloudgrid-drop`).
+
+   Other clients — Claude Desktop, Cursor, claude.ai, ChatGPT — and every
+   install/invoke path in one place: [USAGE.md](USAGE.md).
 
 ## Share something in one step, no login
 
 ```
-/cloudgrid:drop index.html
+/cloudgrid-drop index.html
 ```
 
 `cloudgrid-drop` publishes an HTML page or file and hands back a public URL. No
@@ -52,15 +54,15 @@ account, no CLI. The link lasts 7 days, and you can sign in later to keep it.
 
 | Skill | Invoke | What it does |
 |---|---|---|
-| `cloudgrid-drop` | `/cloudgrid:drop` | Share an HTML page or file, get a public URL. Login optional. |
-| `cloudgrid-login` | `/cloudgrid:login` | Sign in to CloudGrid, with or without the CLI. |
-| `cloudgrid-claim` | `/cloudgrid:claim` | Claim an anonymous drop into your account after signing in. |
-| `cloudgrid-init` | `/cloudgrid:init` | Scaffold a new app or agent. |
-| `cloudgrid-plug` | `/cloudgrid:plug` | Deploy a directory or URL. Live in about 30 seconds. |
-| `cloudgrid-logs` | `/cloudgrid:logs` | Tail logs for an entity. |
-| `cloudgrid-share` | `/cloudgrid:share` | Make an entity shareable and print its URL. |
-| `cloudgrid-feedback` | `/cloudgrid:feedback` | Read the feedback feed. |
-| `cloudgrid-brain` | `/cloudgrid:brain` | Refresh an entity's Grid Brain metadata. |
+| `cloudgrid-drop` | `/cloudgrid-drop` | Share an HTML page or file, get a public URL. Login optional. |
+| `cloudgrid-login` | `/cloudgrid-login` | Sign in to CloudGrid, with or without the CLI. |
+| `cloudgrid-claim` | `/cloudgrid-claim` | Claim an anonymous drop into your account after signing in. |
+| `cloudgrid-init` | `/cloudgrid-init` | Scaffold a new app or agent. |
+| `cloudgrid-plug` | `/cloudgrid-plug` | Deploy a directory or URL. Live in about 30 seconds. |
+| `cloudgrid-logs` | `/cloudgrid-logs` | Tail logs for an entity. |
+| `cloudgrid-share` | `/cloudgrid-share` | Make an entity shareable and print its URL. |
+| `cloudgrid-feedback` | `/cloudgrid-feedback` | Read the feedback feed. |
+| `cloudgrid-brain` | `/cloudgrid-brain` | Refresh an entity's Grid Brain metadata. |
 
 ## The canonical chain
 
