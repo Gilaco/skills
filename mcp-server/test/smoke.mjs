@@ -9,6 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const EXPECTED = [
   "cloudgrid_drop",
+  "cloudgrid_claim",
   "cloudgrid_login",
   "cloudgrid_login_status",
   "cloudgrid_init",

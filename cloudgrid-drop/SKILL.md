@@ -1,11 +1,11 @@
 ---
-version: 0.1.7
+version: 0.1.9
 name: cloudgrid-drop
 description: |
-  Share an artifact instantly with no login. Use when the user wants to share,
-  publish, send, or deploy an HTML page or file and is not signed in, or just
-  wants a link to send a friend. Uploads to CloudGrid and returns a public URL.
-  Anonymous, inspirations only, 7-day expiry, claimable later.
+  Share an artifact and get a public URL. Use when the user wants to share,
+  publish, send, or deploy an HTML page or file, or wants a link for a friend.
+  Works with no login (anonymous, 7-day, claimable later) or signed in (published
+  into the user's org, owned, 30-day). Inspirations only.
 argument-hint: "[file]"
 allowed-tools: Bash
 ---
@@ -53,11 +53,30 @@ The response is JSON. Read two fields:
 - `url` — the live, shareable link. Give this to the user.
 - `claim_url` — the link to sign in and keep it past the 7-day expiry.
 
+## If the user is signed in
+
+A signed-in user can publish into their own org instead of anonymously — the drop
+is owned, lasts 30 days, and needs no claim. Add their token and org to the same
+request:
+
+```
+JWT=$(jq -r .jwt ~/.cloudgrid/credentials 2>/dev/null)
+ORG=$(grep -E '^\s*active_org_slug:' ~/.cloudgrid/config.yaml | awk '{print $2}')
+curl -sS -X POST https://api.cloudgrid.io/api/v2/drop/auto \
+  -H "Authorization: Bearer $JWT" -H "X-CloudGrid-Org: $ORG" \
+  -F "artifact=@/path/to/index.html;type=text/html" -F "org_slug=$ORG"
+```
+
+The response has `owned_by: "authenticated"` and no `claim_url`. If the user is a
+member of several orgs and `X-CloudGrid-Org` is missing, the API replies with the
+list of orgs to choose from. The MCP `cloudgrid_drop` tool does this automatically
+when credentials are present.
+
 ## After the drop
 
 Print the `url` on its own line, by itself, so it can be copied in one go. Then add
-one line: the drop is anonymous and lasts 7 days, and they can claim it to keep it.
-Do not bury the URL in prose.
+one line of context: an anonymous drop lasts 7 days and can be claimed to keep it;
+a signed-in drop is already owned. Do not bury the URL in prose.
 
 ## Limits and errors
 

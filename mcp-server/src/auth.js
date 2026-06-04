@@ -10,7 +10,7 @@
 // No new identity provider, no localhost callback, no CLI dependency.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, chmod } from "node:fs/promises";
+import { mkdir, writeFile, chmod, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -44,6 +44,29 @@ export async function pollStatusOnce(code) {
     throw new Error(`Sign-in status check failed: HTTP ${res.status}`);
   }
   return res.json();
+}
+
+// Read the stored credentials, or null if absent/unreadable. Same file the CLI
+// writes, so an MCP can reuse a CLI login (and vice versa).
+export async function readCredentials() {
+  try {
+    const creds = JSON.parse(await readFile(credentialsPath(), "utf8"));
+    return creds && creds.jwt ? creds : null;
+  } catch {
+    return null;
+  }
+}
+
+// The CLI's active org slug from ~/.cloudgrid/config.yaml, or null. A minimal
+// line parse — no YAML dependency for one field.
+export async function readActiveOrgSlug() {
+  try {
+    const raw = await readFile(join(cloudgridHome(), "config.yaml"), "utf8");
+    const m = raw.match(/^\s*active_org_slug:\s*(\S+)\s*$/m);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 // Decode a JWT payload without verifying it — only to populate the credentials

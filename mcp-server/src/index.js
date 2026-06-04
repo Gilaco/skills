@@ -18,11 +18,17 @@ import {
   pollStatusOnce,
   writeCredentials,
   credentialsPath,
+  readCredentials,
+  readActiveOrgSlug,
 } from "./auth.js";
 
 // The in-progress sign-in code, held between cloudgrid_login and
 // cloudgrid_login_status calls. The server process lives for the session.
 let pendingLoginCode = null;
+
+// The claim token from the most recent anonymous drop, so cloudgrid_claim can
+// claim it without the caller threading the token back.
+let lastAnonClaim = null;
 
 // Best-effort: open the user's browser at the sign-in URL. Never throws; the URL
 // is always returned to the user regardless. Suppressed by CLOUDGRID_NO_BROWSER.
@@ -96,10 +102,11 @@ function looksLikeFullHtml(s) {
   return head.startsWith("<!doctype html") || head.startsWith("<html");
 }
 
-// The anonymous drop. Unlike every other tool here, this does NOT use the CLI:
-// the anonymous path has no identity to manage, so it posts straight to the
-// public endpoint. Returns the live shareable URL and the claim link.
-async function runDrop({ html, path: filePath, filename }) {
+// The drop. Identity-optional: if the user is signed in (credentials present and
+// `anonymous` is not forced), it publishes into their org as an owned inspiration;
+// otherwise it drops anonymously and returns a claim link. This is the one tool
+// family that does NOT wrap the CLI — the drop endpoint needs no coding environment.
+async function runDrop({ html, path: filePath, filename, anonymous, org }) {
   let bytes;
   let name;
   let type;
@@ -128,12 +135,25 @@ async function runDrop({ html, path: filePath, filename }) {
     throw new Error("Provide either `html` (inline content) or `path` (a local file).");
   }
 
+  // Identity vs anonymous. Default to the signed-in identity if credentials exist.
+  const headers = {};
+  let orgSlug = null;
+  if (anonymous !== true) {
+    const creds = await readCredentials();
+    if (creds?.jwt) {
+      headers["Authorization"] = `Bearer ${creds.jwt}`;
+      orgSlug = org || (await readActiveOrgSlug());
+      if (orgSlug) headers["X-CloudGrid-Org"] = orgSlug;
+    }
+  }
+
   const form = new FormData();
   form.append("artifact", new Blob([bytes], { type }), name);
+  if (orgSlug) form.append("org_slug", orgSlug);
 
   let res;
   try {
-    res = await fetch(`${API_BASE}/api/v2/drop/auto`, { method: "POST", body: form });
+    res = await fetch(`${API_BASE}/api/v2/drop/auto`, { method: "POST", headers, body: form });
   } catch (err) {
     throw new Error(`Could not reach CloudGrid at ${API_BASE}: ${err.message}`);
   }
@@ -148,15 +168,85 @@ async function runDrop({ html, path: filePath, filename }) {
 
   if (!res.ok) {
     const msg = data?.error?.message || data?.message || raw || `HTTP ${res.status}`;
-    throw new Error(`Drop failed (HTTP ${res.status}): ${msg}`);
+    const hint = data?.error?.details?.[0]?.hint;
+    throw new Error(`Drop failed (HTTP ${res.status}): ${msg}${hint ? ` ${hint}` : ""}`);
   }
 
-  const lines = [`Live: ${data.url}`];
-  if (data.expires_at) {
-    lines.push(`Expires ${data.expires_at} — anonymous drops last 7 days.`);
+  if (data.owned_by === "authenticated") {
+    lastAnonClaim = null;
+    const lines = [`Published to your org: ${data.url}`, "Owned by you."];
+    if (data.expires_at) lines.push(`Expires ${data.expires_at}.`);
+    return lines.join("\n");
   }
+
+  // Anonymous: remember the claim token so cloudgrid_claim can use it.
   if (data.claim_url) {
-    lines.push(`Sign in to claim it and keep it past 7 days: ${data.claim_url}`);
+    try {
+      lastAnonClaim = {
+        token: new URL(data.claim_url).searchParams.get("token"),
+        entity_id: data.entity_id,
+        url: data.url,
+      };
+    } catch {
+      lastAnonClaim = null;
+    }
+  }
+  const lines = [`Live: ${data.url}`];
+  if (data.expires_at) lines.push(`Expires ${data.expires_at} — anonymous drops last 7 days.`);
+  if (data.claim_url) lines.push("Sign in, then run cloudgrid_claim to keep it past 7 days.");
+  return lines.join("\n");
+}
+
+// Claim one or more anonymous drops into the signed-in identity.
+async function runClaim({ claim_token, claim_url }) {
+  const creds = await readCredentials();
+  if (!creds?.jwt) {
+    throw new Error("You are not signed in. Run cloudgrid_login first, then claim.");
+  }
+  let token = claim_token;
+  if (!token && claim_url) {
+    try {
+      token = new URL(claim_url).searchParams.get("token");
+    } catch {
+      token = null;
+    }
+  }
+  if (!token && lastAnonClaim) token = lastAnonClaim.token;
+  if (!token) {
+    throw new Error("No claim token. Pass claim_token or claim_url from an anonymous drop.");
+  }
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api/v2/anon-claim`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${creds.jwt}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ claim_token: token }),
+    });
+  } catch (err) {
+    throw new Error(`Could not reach CloudGrid at ${API_BASE}: ${err.message}`);
+  }
+
+  const raw = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    // handled below
+  }
+  if (!res.ok) {
+    const msg = data?.error?.message || data?.message || raw || `HTTP ${res.status}`;
+    throw new Error(`Claim failed (HTTP ${res.status}): ${msg}`);
+  }
+
+  const claimed = Array.isArray(data?.claimed) ? data.claimed : [];
+  if (claimed.length === 0) {
+    return "Nothing to claim — it may already be claimed or expired.";
+  }
+  lastAnonClaim = null;
+  const lines = [`Claimed ${claimed.length}, now yours:`];
+  for (const c of claimed) {
+    lines.push(`${c.url}${c.new_expires_at ? ` (expires ${c.new_expires_at})` : ""}`);
   }
   return lines.join("\n");
 }
@@ -281,7 +371,7 @@ server.tool(
 
 server.tool(
   "cloudgrid_drop",
-  "Share an artifact instantly with no login: publish an HTML page (or a file) to CloudGrid and get a public shareable URL. Use when the user wants to share, publish, send, or 'deploy' something and is not signed in, or just wants a link to send a friend. Anonymous: inspirations only, 7-day expiry, claimable later. Calls the API directly; does not use the CLI.",
+  "Publish an HTML page or file to CloudGrid and get a public shareable URL. Use when the user wants to share, publish, send, or 'deploy' an artifact, or wants a link to send a friend. If signed in, it publishes into the user's org as an owned inspiration (30-day expiry); if not, it drops anonymously (7-day expiry, claimable later). Calls the API directly; does not use the CLI.",
   {
     html: z
       .string()
@@ -295,10 +385,40 @@ server.tool(
       .string()
       .optional()
       .describe("Filename to present. Defaults to index.html for inline HTML."),
+    anonymous: z
+      .boolean()
+      .optional()
+      .describe("Force an anonymous drop even if the user is signed in."),
+    org: z
+      .string()
+      .optional()
+      .describe("Org slug to publish into when signed in. Defaults to the active org."),
   },
   async (input) => {
     try {
       return ok(await runDrop(input || {}));
+    } catch (err) {
+      return fail(err.message);
+    }
+  },
+);
+
+server.tool(
+  "cloudgrid_claim",
+  "Claim an anonymous drop into the signed-in account, so it becomes owned and stops expiring in 7 days. Use after the user signs in to keep something they dropped anonymously. The public URL does not change. Requires sign-in (cloudgrid_login). Calls the API directly.",
+  {
+    claim_token: z
+      .string()
+      .optional()
+      .describe("The claim token from an anonymous drop."),
+    claim_url: z
+      .string()
+      .optional()
+      .describe("The claim_url from an anonymous drop; the token is read from it."),
+  },
+  async (input) => {
+    try {
+      return ok(await runClaim(input || {}));
     } catch (err) {
       return fail(err.message);
     }

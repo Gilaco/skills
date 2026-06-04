@@ -37,7 +37,8 @@ It speaks MCP over stdio. Point any MCP client at the `cloudgrid-mcp` command.
 
 | Tool | Wraps | Notes |
 |---|---|---|
-| `cloudgrid_drop` | `POST /api/v2/drop/auto` | Anonymous artifact drop. No CLI, no login. Calls the API directly. |
+| `cloudgrid_drop` | `POST /api/v2/drop/auto` | Artifact drop. Anonymous, or owned if signed in. No CLI. Direct API. |
+| `cloudgrid_claim` | `POST /api/v2/anon-claim` | Claim an anonymous drop into the signed-in account. Direct API. |
 | `cloudgrid_login` | `GET /auth/login` | Start a CLI-free sign-in; returns a URL to open. Calls the API directly. |
 | `cloudgrid_login_status` | `GET /auth/status` | Finish the sign-in; saves the token to the shared CLI credentials. |
 | `cloudgrid_init` | `cloudgrid init` | Register an app or agent; optionally seed a web service. |
